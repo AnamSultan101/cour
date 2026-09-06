@@ -1,0 +1,36 @@
+name: Refresh anime data
+
+# Runs four times a day. AniList needs no key, so there are no secrets here.
+# Nothing personal is fetched or stored — only public airing data.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write             # so it can commit data/anime.json back
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch from AniList
+        run: node scripts/refresh.mjs
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "cour-bot"
+          git config user.email "actions@github.com"
+          git add data/anime.json
+          if git diff --staged --quiet; then
+            echo "No change this run."
+          else
+            git commit -m "data: refresh $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
