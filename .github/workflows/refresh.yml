@@ -18,10 +18,28 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+
+      - name: Show what's in the repo
+        run: |
+          echo "--- files ---"
+          ls -R . | head -40
+          echo "--- node ---"
+          node --version
 
       - name: Fetch from AniList
-        run: node scripts/refresh.mjs
+        run: |
+          if [ -f scripts/refresh.mjs ]; then
+            echo "Running scripts/refresh.mjs"
+            node scripts/refresh.mjs
+          elif [ -f refresh.mjs ]; then
+            echo "Running refresh.mjs from the repo root"
+            node refresh.mjs
+          else
+            echo "ERROR: refresh.mjs is not in this repo."
+            echo "Put it at scripts/refresh.mjs (or the repo root) and run again."
+            exit 1
+          fi
 
       - name: Commit if anything changed
         run: |
