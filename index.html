@@ -295,7 +295,7 @@ function state(f){
   if(w===0&&b>0)return 'notstarted';
   if(b===0){
     if(airingEntry(f))return 'caught';
-    if(announcedEntry(f))return 'between';
+    if(announcedEntry(f))return 'caught';
     if(f.more)return 'ongoing';
     return 'completed';
   }
@@ -307,6 +307,8 @@ function stateLine(f){
   if(st==='watching')return `${b} episode${b===1?'':'s'} waiting`;
   if(st==='seasonbehind'){const n=seasonsBehind(f);return `${n} season${n===1?'':'s'} behind`;}
   if(st==='caught'){
+    const next=announcedEntry(f);
+    if(next){const d=next.nextDate?daysTo(next.nextDate):null;return d!=null&&d>=0?`${next.label} in ${d}d`:'Next season announced';}
     const a=airingEntry(f);
     if(a&&a.nextDate){const d=daysTo(a.nextDate);if(d!=null&&d>=0)return d===0?'New episode today':`Next episode in ${d}d`;}
     return 'Caught up — waiting';
@@ -1183,7 +1185,7 @@ function livePool(){
 }
 function applyLive(f,list){
   if(!list||!list.length)return false;
-  const primary=list[0], releasing=list.filter(function(m){return m.status==='RELEASING';})[0];
+  const primary=list[0], releasing=primary.status==='RELEASING'?primary:null;
   if(!f.cover&&primary.coverImage&&primary.coverImage.extraLarge)f.cover=primary.coverImage.extraLarge;
   if(!f.banner&&primary.bannerImage)f.banner=primary.bannerImage;
   if(f.score==null&&primary.averageScore)f.score=Math.round(primary.averageScore)/10;
