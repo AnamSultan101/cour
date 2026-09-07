@@ -203,7 +203,7 @@ const STORE=(typeof window!=='undefined'&&window.storage&&window.storage.get)?wi
   set:async (k,v)=>{localStorage.setItem(k,v);return{key:k,value:v};}
 };
 let DB={franchises:[],lists:[],discover:[],prefs:{theme:'crt',accents:{},rank:'overall',covers:{},watchBase:'https://anikoto.cz/search?keyword={q}'}};
-let TAB='dash',TABBACK='dash',LIST=null,ENT=null,GENRE='',SORT='added',HI=0,heroTimer=null,SYNCING=false;
+let TAB='dash',TABBACK='dash',LIST=null,ENT=null,GENRE='',RECGENRE='',SORT='added',HI=0,heroTimer=null,SYNCING=false;
 
 const $=i=>document.getElementById(i);
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -593,38 +593,43 @@ function threeLists(){
   const news=(DB.discover||[]).filter(function(d){return !owned.has(norm(d.title))&&!d.skipped&&(d.score||0)>=7;})
     .map(function(d){return {d:d,fit:(d.genres||[]).filter(function(g){return fav.indexOf(g)>=0;}).length};})
     .sort(function(a,b){return ((b.d.score||0)+b.fit*0.8)-((a.d.score||0)+a.fit*0.8);}).slice(0,6);
-  const worth=news.length?[]:DB.franchises.filter(function(f){
+    const recGenre=RECGENRE||fav[0]||'';
+    const genreMatch=function(f){return !recGenre||(f.genres||[]).indexOf(recGenre)>=0;};
+    const worth=news.length?[]:DB.franchises.filter(function(f){
       if(f.skipped)return false;
       if(['dropped','notmine','active'].indexOf(f.intent)>=0)return false;
-      if(watchedTotal(f)>0)return false;
-      if(['completed','caught','watching','between','seasonbehind'].indexOf(state(f))>=0)return false;
+      if(watchedTotal(f)>0||!genreMatch(f))return false;
       return (f.score||0)>=7;})
     .map(function(f){return {f:f,fit:(f.genres||[]).filter(function(g){return fav.indexOf(g)>=0;}).length};})
     .sort(function(a,b){return ((b.f.score||0)+b.fit*0.8)-((a.f.score||0)+a.fit*0.8);}).slice(0,6);
   const wl=byIntent('later').slice(0,6);
-  return `<h2>Worth a look <span class="c">upcoming · rated · planned</span></h2><div class="cols3">
+  const recGenres=Array.from(new Set([].concat(fav,CATS))).slice(0,10);
+  return `<h2>Worth a look <span class="c">7+ rated · choose a genre</span></h2>
+  <div class="tags" style="margin-bottom:12px">${recGenres.map(function(g){return `<button class="tag" aria-pressed="${recGenre===g}" onclick="setRecGenre('${esc(g)}')">${esc(g)}</button>`;}).join('')}</div>
+  <div class="cols3">
     <div class="col"><h3>Upcoming seasons</h3>${upcoming.length?upcoming.map(f=>{
       const a=announcedEntry(f),d=a.nextDate?daysTo(a.nextDate):null;
       return mini(f,a.label+(d!=null&&d>=0?` · in ${d}d`:' · date TBA'));}).join(''):'<span class="muted" style="font-size:12px">Nothing announced yet.</span>'}</div>
     <div class="col"><h3>Might be worth it <span class="muted" style="font-weight:400">7+</span></h3>${
       (function(){
-        const sug=(DB.suggestions||[]).filter(function(s){return (s.score||0)>=7;})
+        const sug=(DB.suggestions||[]).filter(function(s){return (s.score||0)>=7&&(!recGenre||(s.genres||[]).indexOf(recGenre)>=0);})
           .map(function(s){return {s:s,fit:(s.genres||[]).filter(function(g){return fav.indexOf(g)>=0;}).length};})
           .sort(function(a,b){return ((b.s.score||0)+b.fit*0.8)-((a.s.score||0)+a.fit*0.8);}).slice(0,6);
-        if(sug.length)return sug.map(function(o){
+        if(sug.length)return sug.slice(0,3).map(function(o){
           const st=o.s.status==='announced'?'upcoming':'airing';
           return `<button class="mini" onclick="addSuggestion('${esc(o.s.title)}')">
             <div class="fr r169" style="width:60px;height:34px;border-radius:2px;flex:none">${o.s.cover?`<img src="${esc(o.s.cover)}" alt="">`:''}</div>
             <div style="flex:1;min-width:0"><b>${esc(o.s.title)}</b>
               <span>${o.s.score} · ${st}${o.s.nextDate?' · '+esc(o.s.nextDate):''}${o.fit?' · your genres':''}</span></div></button>`;
         }).join('');
-        return worth.length?worth.map(function(o){return mini(o.f,`${o.f.score} · ${(o.f.genres||[]).slice(0,2).join(' / ')}${o.fit?' · your genres':''}`);}).join('')
+        return worth.length?worth.slice(0,3).map(function(o){return mini(o.f,`${o.f.score} · ${(o.f.genres||[]).slice(0,2).join(' / ')}${o.fit?' · '+esc(recGenre):''}`);}).join('')
           :'<span class="muted" style="font-size:12px">Run the sync script to pull new shows in your genres.</span>';
       })()
     }</div>
     <div class="col"><h3>From the watchlist</h3>${wl.length?wl.map(f=>mini(f,[f.year,f.studio].filter(Boolean).join(' · '))).join(''):'<span class="muted" style="font-size:12px">Watchlist is empty.</span>'}</div>
   </div>`;
 }
+window.setRecGenre=function(g){RECGENRE=g;render();};
 function dash(){
   const w=inState('watching'), ne=newEpisodes(), und=undecided();
   let h=`<div class="stats">
@@ -1207,7 +1212,7 @@ function applyLive(f,list){
     const nx=releasing.nextAiringEpisode;
     e.aired=nx?Math.max(0,nx.episode-1):(releasing.episodes||e.aired||0);
     if(releasing.episodes)e.episodes=releasing.episodes;
-    if(nx)e.nextDate=new Date(nx.airingAt*1000).toISOString().slice(0,10);
+    if(nx){e.nextDate=new Date(nx.airingAt*1000).toISOString().slice(0,10);e.weekday=new Date(nx.airingAt*1000).getDay();}
   }else{
     es.forEach(function(e){if(e.status==='airing'){e.status='finished';e.nextDate='';if(!e.episodes)e.episodes=e.aired;}});
   }
@@ -1356,7 +1361,7 @@ window.syncLive=async function(quiet, missingArtOnly){
       const batch=pool.slice(i,i+6);
       const vars={},parts=[];
       batch.forEach(function(f,j){
-        vars['s'+j]=f.title;
+        vars['s'+j]=f.englishTitle||f.title;
         parts.push(`a${j}:Page(perPage:4){media(search:$s${j},type:ANIME,sort:[SEARCH_MATCH]){${SYNC_FIELDS}}}`);
       });
       const q='query('+batch.map(function(f,j){return '$s'+j+':String';}).join(',')+'){'+parts.join(' ')+'}';
