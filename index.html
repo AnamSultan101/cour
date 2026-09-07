@@ -244,6 +244,12 @@ async function load(){
   DB.prefs=DB.prefs||{};DB.prefs.covers=DB.prefs.covers||{};DB.prefs.accents=DB.prefs.accents||{};
   DB.lists=DB.lists||[];DB.discover=DB.discover||[];
   if(!DB.prefs.watchBase)DB.prefs.watchBase='https://anikoto.cz/search?keyword={q}';
+  if(DB.prefs.airingVerified!==true){
+    DB.franchises.forEach(function(f){(f.entries||[]).forEach(function(e){
+      if(e.status==='airing'){e.status='finished';e.nextDate='';if(!e.episodes)e.episodes=e.aired;}
+    });});
+    DB.prefs.airingVerified=false;
+  }
 }
 let tm,ctm;
 function save(){
@@ -1324,6 +1330,7 @@ function applyFeed(feed){
     .slice(0,40);
   DB.prefs.lastSync=Date.now();
   DB.prefs.feedAt=feed.generated||'';
+  DB.prefs.airingVerified=true;
   save();
   return touched;
 }
@@ -1365,6 +1372,7 @@ window.syncLive=async function(quiet, missingArtOnly){
     }
     await syncDiscover();
     DB.prefs.lastSync=Date.now();
+    DB.prefs.airingVerified=true;
     save();render();
     if(!quiet)toast(ok+' shows refreshed');
   }catch(err){
@@ -1485,6 +1493,10 @@ window.restorePaste=function(){
     else return toast('Not a Cour Tracker backup');
     DB.prefs=DB.prefs||{};DB.prefs.covers=DB.prefs.covers||{};DB.prefs.accents=DB.prefs.accents||{};
     DB.lists=DB.lists||[];
+    DB.prefs.airingVerified=false;
+    DB.franchises.forEach(function(f){(f.entries||[]).forEach(function(e){
+      if(e.status==='airing'){e.status='finished';e.nextDate='';if(!e.episodes)e.episodes=e.aired;}
+    });});
     save();closeLayer();render();toast(`Restored ${DB.franchises.length} shows`);
   }catch(e){toast('Could not read that');}
 };
