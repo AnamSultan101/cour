@@ -1171,6 +1171,11 @@ function aliveOnes(){
     return airingEntry(f)||announcedEntry(f)||f.more||['watching','caught','between','ongoing'].indexOf(st)>=0;
   }).slice(0,60);
 }
+function artworkPool(){
+  return DB.franchises.filter(function(f){
+    return ['dropped','notmine'].indexOf(f.intent)<0 && !art(f);
+  });
+}
 function applyLive(f,list){
   if(!list||!list.length)return false;
   const primary=list[0], releasing=list.filter(function(m){return m.status==='RELEASING';})[0];
@@ -1257,6 +1262,7 @@ function applyFeed(feed){
     return fuzzy;
   };
   let touched=0;
+  const currentAiring=new Set();
   (feed.shows||[]).forEach(function(m){
     const f=resolve(m);
     if(!f)return;
@@ -1269,6 +1275,7 @@ function applyFeed(feed){
     if(!f.englishTitle&&m.english)f.englishTitle=m.english;
     const es=ordered(f);
     if(m.status==='airing'){
+      currentAiring.add(f.id);
       let e=airingEntry(f)||es[es.length-1];
       if(!e){e={id:uid(),label:'Season 1',order:1,type:'tv',watched:0};f.entries=[e];}
       e.status='airing';
@@ -1286,6 +1293,12 @@ function applyFeed(feed){
       f.more=true;
     }
     touched++;
+  });
+  DB.franchises.forEach(function(f){
+    if(currentAiring.has(f.id))return;
+    (f.entries||[]).forEach(function(e){
+      if(e.status==='airing'){e.status='finished';e.nextDate='';if(!e.episodes)e.episodes=e.aired;}
+    });
   });
   // anything in the feed you don't own, scoring 7+, becomes a discovery candidate
   const owned=new Set(DB.franchises.map(function(f){return norm(f.title);}));
@@ -1312,18 +1325,17 @@ window.syncNow=async function(quiet){
   try{
     const feed=await pullFeed();
     const n=applyFeed(feed);
-    render();SYNCING=false;
+    render();
     if(!quiet)toast(n+' shows updated from the daily feed');
-    return;
   }catch(e){/* no feed file — fall through to querying AniList directly */}
   SYNCING=false;
-  await syncLive(quiet);
+  await syncLive(quiet, true);
 };
-window.syncLive=async function(quiet){
+window.syncLive=async function(quiet, missingArtOnly){
   if(SYNCING)return;SYNCING=true;
-  const pool=aliveOnes();
+  const pool=missingArtOnly?artworkPool():aliveOnes();
   if(!pool.length){SYNCING=false;return;}
-  if(!quiet)toast('Checking '+pool.length+' shows…');
+  if(!quiet)toast('Checking '+pool.length+' shows for artwork…');
   let ok=0,fail=0;
   try{
     for(let i=0;i<pool.length;i+=6){
@@ -1461,6 +1473,7 @@ window.restorePaste=function(){
   try{
     const d=JSON.parse(($('rs').value||'').trim());
     if(d.franchises){DB=Object.assign({lists:[],prefs:DB.prefs},d);}
+    else if(d.generated&&d.counts&&Array.isArray(d.shows))return toast('That is airing data, not a library backup');
     else if(d.shows){migrate(d);}
     else return toast('Not a Cour Tracker backup');
     DB.prefs=DB.prefs||{};DB.prefs.covers=DB.prefs.covers||{};DB.prefs.accents=DB.prefs.accents||{};
