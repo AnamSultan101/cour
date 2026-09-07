@@ -504,6 +504,7 @@ function weekStrip(){
       const d=new Date(e.nextDate+'T00:00:00');
       if(!isNaN(d)){cells[d.getDay()].push({f:f,e:e});return;}
     }
+    if(e.weekday!=null&&e.weekday>=0&&e.weekday<=6){cells[e.weekday].push({f:f,e:e});return;}
     undated.push({f:f,e:e});
   });
   return `<h2>Airing this week <span class="c">when new episodes drop</span></h2><div class="week">`+
@@ -528,6 +529,7 @@ window.setDay=function(fid,eid,dow){
   let add=(want-cur+7)%7; if(add===0)add=7;
   const d=new Date(now.getTime()+add*864e5);
   e.nextDate=d.toISOString().slice(0,10);
+  e.weekday=want;
   save();render();toast('Airs on '+DAYS[want]);
 };
 function schedule(){
@@ -1273,6 +1275,7 @@ function applyFeed(feed){
       if(m.aired!=null)e.aired=m.aired;
       if(m.episodes)e.episodes=m.episodes;
       if(m.nextDate)e.nextDate=m.nextDate;
+      if(m.weekday!=null)e.weekday=m.weekday;
     }
     if(m.sequel){
       const lbl=m.sequel.title;
