@@ -60,16 +60,17 @@
   .dot{width:8px;height:8px;border-radius:99px;background:rgba(255,255,255,.4);border:0;cursor:pointer;padding:0}
   .dot[aria-current="true"]{background:var(--accent);width:20px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:14px}
-  .striprow{display:flex;align-items:stretch;gap:6px;max-width:100%}
+  .striprow{position:relative;padding-top:28px;max-width:100%}
   .strip{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;flex:1;min-width:0;scrollbar-width:none;scroll-behavior:smooth}
   .strip::-webkit-scrollbar{display:none}
-  .sarr{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:var(--r);width:30px;flex:none;cursor:pointer;font:inherit;font-size:18px;line-height:1}
+  .sarr{position:absolute;top:0;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:var(--r);width:24px;height:22px;cursor:pointer;font:inherit;font-size:15px;line-height:1;z-index:2}
+  .sarr:first-child{left:0}.sarr:last-child{right:0}
   .sarr:hover{border-color:var(--accent);color:var(--accent)}
   .sites{display:flex;flex-wrap:wrap;gap:6px}
   .site{border:1px solid var(--line);border-radius:var(--r);padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;background:var(--panel);color:var(--ink);border-left-width:3px}
   .site:hover{border-color:var(--accent)}
-  .hero{cursor:grab;touch-action:pan-y}
-  .hero.drag{cursor:grabbing}
+  .hero{cursor:grab;touch-action:pan-y;transition:transform .22s ease-out}
+  .hero.drag{cursor:grabbing;transition:none}
   .strip .card{flex:none;width:212px}
   .card{background:none;border:0;padding:0;font:inherit;color:var(--ink);text-align:left;cursor:pointer;display:block;width:100%}
   .card .fr{border-radius:var(--r);border:1px solid var(--line);box-shadow:var(--shadow)}
@@ -203,7 +204,7 @@ const STORE=(typeof window!=='undefined'&&window.storage&&window.storage.get)?wi
   set:async (k,v)=>{localStorage.setItem(k,v);return{key:k,value:v};}
 };
 let DB={franchises:[],lists:[],discover:[],prefs:{theme:'crt',accents:{},rank:'overall',covers:{},watchBase:'https://anikoto.cz/search?keyword={q}'}};
-let TAB='dash',TABBACK='dash',LIST=null,ENT=null,GENRE='',RECGENRE='',SORT='added',HI=0,heroTimer=null,SYNCING=false;
+let TAB='dash',TABBACK='dash',LIST=null,ENT=null,GENRE='',RECGENRE='',WEEKDAY=null,SORT='added',HI=0,heroTimer=null,SYNCING=false;
 
 const $=i=>document.getElementById(i);
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -214,7 +215,7 @@ function hash(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;r
 
 /* ---------- storage + migration ---------- */
 function migrate(old){
-  const map={completed:'active',watching:'active',caught:'active',planned:'later',treasure:'treasure',dropped:'dropped',meh:'notmine',unsorted:''};
+  const map={completed:'active',watching:'active',caught:'active',planned:'later',treasure:'treasure',dropped:'dropped',meh:'might',unsorted:''};
   DB.franchises=(old.shows||[]).map(s=>{
     const movie=(s.format==='MOVIE');
     const total=s.episodes||(movie?1:null);
@@ -463,24 +464,22 @@ function bindSwipe(){
   const el=$('top');if(!el)return;
   const h=el.querySelector('.hero');if(!h)return;
   let x0=null,dragging=false;
-  const start=function(x){x0=x;dragging=true;h.classList.add('drag');};
-  const move=function(x){
+  const start=function(e){x0=e.clientX;dragging=true;h.setPointerCapture(e.pointerId);h.classList.add('drag');};
+  const move=function(e){
     if(!dragging)return;
-    const dx=x-x0;
+    const dx=e.clientX-x0;
     h.style.transform='translateX('+Math.max(-90,Math.min(90,dx*0.35))+'px)';
   };
-  const end=function(x){
+  const end=function(e){
     if(!dragging)return;
     dragging=false;h.classList.remove('drag');h.style.transform='';
-    const dx=x-x0;x0=null;
+    const dx=e.clientX-x0;x0=null;
     if(Math.abs(dx)>60)stepHero(dx<0?1:-1);
   };
-  h.addEventListener('touchstart',function(e){start(e.touches[0].clientX);},{passive:true});
-  h.addEventListener('touchmove',function(e){move(e.touches[0].clientX);},{passive:true});
-  h.addEventListener('touchend',function(e){end(e.changedTouches[0].clientX);},{passive:true});
-  h.addEventListener('mousedown',function(e){e.preventDefault();start(e.clientX);});
-  window.addEventListener('mousemove',function(e){move(e.clientX);});
-  window.addEventListener('mouseup',function(e){end(e.clientX);});
+  h.addEventListener('pointerdown',function(e){e.preventDefault();start(e);});
+  h.addEventListener('pointermove',move);
+  h.addEventListener('pointerup',end);
+  h.addEventListener('pointercancel',end);
 }
 function startHero(){
   clearInterval(heroTimer);
@@ -515,21 +514,22 @@ function weekStrip(){
     if(e.weekday!=null&&e.weekday>=0&&e.weekday<=6){cells[e.weekday].push({f:f,e:e});return;}
     undated.push({f:f,e:e});
   });
-  return `<h2>Airing this week <span class="c">when new episodes drop</span></h2><div class="week">`+
+  const selected= WEEKDAY==null?[]:list.filter(function(f){
+    const e=airingEntry(f);if(e.weekday!=null)return e.weekday===WEEKDAY;
+    if(e.nextDate){const d=new Date(e.nextDate+'T00:00:00');return !isNaN(d)&&d.getDay()===WEEKDAY;}
+    return false;
+  });
+  return `<h2>Airing this week <span class="c">click a day to expand</span></h2><div class="week">`+
     cells.map(function(c,i){
-      return `<div class="day ${i===today?'today':''}"><b>${DAYS[i].toUpperCase()}</b>`+
+      return `<button class="day ${i===today?'today':''}" onclick="toggleWeekday(${i})"><b>${DAYS[i].toUpperCase()}</b>`+
         (c.length?c.slice(0,6).map(function(o){
-          return `<div class="ep" onclick="openEntity('${o.f.id}')">${esc(o.f.title.slice(0,24))}<br><span>EP ${(o.e.aired||0)+1}</span></div>`;
+          return `<span class="ep">${esc(o.f.title.slice(0,24))}<br><span>EP ${(o.e.aired||0)+1}</span></span>`;
         }).join(''):'<span class="muted" style="font-size:11px">—</span>')+`</div>`;
     }).join('')+`</div>`+
-    (undated.length?`<div class="box" style="margin-top:10px"><h4>NOT SCHEDULED YET — ${undated.length}</h4>`+
-      undated.slice(0,14).map(function(o){
-        return `<div class="li"><b style="flex:1;font-size:13px">${esc(o.f.title)}</b>
-          <span class="muted" style="font-size:11px">airs</span>
-          <select style="max-width:130px" onchange="setDay('${o.f.id}','${o.e.id}',this.value)">
-            <option value="">airs on…</option>${DAYS.map(function(d,i){return `<option value="${i}">${d}</option>`;}).join('')}</select></div>`;
-      }).join('')+`</div>`:'');
+    (WEEKDAY==null?'':`<div class="box" style="margin-top:10px"><h4>${DAYS[WEEKDAY].toUpperCase()} — ${selected.length}</h4>`+
+      selected.map(function(f){const e=airingEntry(f);return `<div class="li"><button class="flink" onclick="openEntity('${f.id}')"><b>${esc(f.title)}</b><span class="n">EP ${(e.aired||0)+1}</span></button></div>`;}).join('')+`</div>`);
 }
+window.toggleWeekday=function(day){WEEKDAY=WEEKDAY===day?null:day;render();};
 window.setDay=function(fid,eid,dow){
   if(dow==='')return;
   const f=find(fid),e=f.entries.find(function(x){return x.id===eid;});
@@ -590,7 +590,7 @@ function threeLists(){
   const upcoming=DB.franchises.filter(f=>announcedEntry(f)&&!['dropped','notmine'].includes(f.intent))
     .sort((a,b)=>((announcedEntry(a).nextDate||'9')).localeCompare(announcedEntry(b).nextDate||'9')).slice(0,6);
   const owned=new Set(DB.franchises.map(function(f){return norm(f.title);}));
-  const news=(DB.discover||[]).filter(function(d){return !owned.has(norm(d.title))&&!d.skipped&&(d.score||0)>=7;})
+  const news=(DB.discover||[]).filter(function(d){return !owned.has(norm(d.title))&&!d.skipped&&(d.score||0)>=7&&(!RECGENRE||(d.genres||[]).indexOf(RECGENRE)>=0);})
     .map(function(d){return {d:d,fit:(d.genres||[]).filter(function(g){return fav.indexOf(g)>=0;}).length};})
     .sort(function(a,b){return ((b.d.score||0)+b.fit*0.8)-((a.d.score||0)+a.fit*0.8);}).slice(0,6);
     const recGenre=RECGENRE||fav[0]||'';
