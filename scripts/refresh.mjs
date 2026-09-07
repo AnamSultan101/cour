@@ -20,19 +20,44 @@ const dateOf = d => (d && d.year)
   : "";
 
 async function gql(query, variables) {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch("https://graphql.anilist.co", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ query, variables })
-    });
-    if (res.status === 429) { await sleep(8000); continue; }
-    if (!res.ok) { await sleep(2000); continue; }
-    const body = await res.json();
+  let lastReason = "unknown";
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    let res;
+    try {
+      res = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query, variables })
+      });
+    } catch (e) {
+      lastReason = "network: " + e.message;
+      console.log(`  attempt ${attempt}: ${lastReason}`);
+      await sleep(3000); continue;
+    }
+    if (res.status === 429) {
+      lastReason = "rate limited";
+      console.log(`  attempt ${attempt}: rate limited, waiting`);
+      await sleep(10000); continue;
+    }
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); }
+    catch { lastReason = `HTTP ${res.status}, not JSON: ${text.slice(0, 200)}`;
+      console.log(`  attempt ${attempt}: ${lastReason}`); await sleep(2500); continue; }
+
+    if (body.errors && body.errors.length) {
+      lastReason = body.errors.map(e => e.message).join(" | ");
+      console.log(`  attempt ${attempt}: AniList said: ${lastReason}`);
+      // a bad query will never succeed, so stop retrying it
+      if (/Cannot query|Unknown argument|Expected type|Unknown type/i.test(lastReason)) break;
+      await sleep(2500); continue;
+    }
     if (body.data) return body.data;
-    await sleep(2000);
+    lastReason = `HTTP ${res.status}, no data`;
+    console.log(`  attempt ${attempt}: ${lastReason}`);
+    await sleep(2500);
   }
-  throw new Error("AniList unreachable after retries");
+  throw new Error(lastReason);
 }
 
 const FIELDS = `
@@ -116,14 +141,20 @@ function shape(m) {
   };
 }
 
-async function collect(query, vars, cap = 4) {
+async function collect(label, query, vars, cap = 4) {
   const out = [];
   for (let page = 1; page <= cap; page++) {
-    const d = await gql(query, Object.assign({ page }, vars));
+    let d;
+    try { d = await gql(query, Object.assign({ page }, vars)); }
+    catch (e) {
+      console.log(`  ${label}: stopped at page ${page} — ${e.message}`);
+      break;
+    }
     (d.Page.media || []).forEach(m => out.push(shape(m)));
     if (!d.Page.pageInfo.hasNextPage) break;
     await sleep(900);
   }
+  console.log(`  ${label}: ${out.length}`);
   return out;
 }
 
@@ -133,11 +164,11 @@ const nxt = nextSeason(cur);
 
 console.log(`Refreshing: ${cur.season} ${cur.year} airing, ${nxt.season} ${nxt.year} upcoming, top rated ${cur.year}`);
 
-const airing = await collect(PAGE_Q, { season: cur.season, year: cur.year, status: "RELEASING" }, 4);
+const airing = await collect("airing", PAGE_Q, { season: cur.season, year: cur.year, status: "RELEASING" }, 4);
 await sleep(900);
-const upcoming = await collect(PAGE_Q, { season: nxt.season, year: nxt.year, status: "NOT_YET_RELEASED" }, 3);
+const upcoming = await collect("upcoming", PAGE_Q, { season: nxt.season, year: nxt.year, status: "NOT_YET_RELEASED" }, 3);
 await sleep(900);
-const top = await collect(TOP_Q, { year: cur.year }, 3);
+const top = await collect("top rated", TOP_Q, { year: cur.year }, 3);
 
 const byId = new Map();
 [...airing, ...upcoming, ...top].forEach(m => { if (!byId.has(m.id)) byId.set(m.id, m); });
@@ -149,6 +180,12 @@ const payload = {
   shows: [...byId.values()]
 };
 
+if (!byId.size) {
+  console.error("\nNothing came back from AniList. The messages above say why.");
+  console.error("Nothing written — the previous data/anime.json is left untouched.");
+  process.exit(1);
+}
+
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT, JSON.stringify(payload));
-console.log(`Wrote data/anime.json — ${payload.counts.total} shows (${airing.length} airing, ${upcoming.length} upcoming, ${top.length} top rated)`);
+console.log(`\nWrote data/anime.json — ${payload.counts.total} shows (${airing.length} airing, ${upcoming.length} upcoming, ${top.length} top rated)`);
