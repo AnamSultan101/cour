@@ -63,7 +63,7 @@
   .striprow{position:relative;padding-top:28px;max-width:100%}
   .strip{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;flex:1;min-width:0;scrollbar-width:none;scroll-behavior:smooth}
   .strip::-webkit-scrollbar{display:none}
-  .sarr{position:absolute;top:0;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:var(--r);width:24px;height:22px;cursor:pointer;font:inherit;font-size:15px;line-height:1;z-index:2}
+  .sarr{position:absolute;top:0;background:transparent;border:0;color:var(--ink);width:24px;height:22px;cursor:pointer;font:inherit;font-size:20px;line-height:1;z-index:2;opacity:.7}
   .sarr:first-child{left:0}.sarr:last-child{right:0}
   .sarr:hover{border-color:var(--accent);color:var(--accent)}
   .sites{display:flex;flex-wrap:wrap;gap:6px}
@@ -147,11 +147,12 @@
   .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);padding:9px 16px;border-radius:var(--r);font-weight:700;z-index:90;font-size:13px}
   .week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;max-width:100%}
   @media(max-width:760px){.week{grid-template-columns:repeat(3,1fr)}}
-  .day{border:1px solid var(--line);border-radius:var(--r);padding:8px;background:var(--panel);min-height:76px}
-  .day b{font-size:11px;letter-spacing:.1em;color:var(--muted);display:block;margin-bottom:6px}
-  .day.today b{color:var(--accent)}
-  .day .ep{font-size:11px;line-height:1.35;margin-bottom:5px;cursor:pointer}
-  .day .ep span{color:var(--accent);font-weight:700}
+  .day{position:relative;border:0;border-radius:0;padding:18px 12px;min-height:116px;background-color:var(--panel);background-position:center;background-size:cover;cursor:pointer;overflow:hidden;text-align:left;color:var(--ink)}
+  .day::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,16,10,.25),rgba(5,16,10,.9))}
+  .day>*{position:relative}
+  .day b{font-size:clamp(16px,2.8vw,30px);letter-spacing:.04em;color:#fff;display:block;margin-top:34px;text-align:center}
+  .day.today b,.day.selected b{color:var(--accent)}
+  .day.selected{box-shadow:inset 0 -3px 0 var(--accent)}
   .cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
   .col h3{font-size:13px;margin:0 0 8px;font-weight:700}
   .mini{display:flex;gap:9px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer;width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;font:inherit;color:var(--ink)}
@@ -521,10 +522,8 @@ function weekStrip(){
   });
   return `<h2>Airing this week <span class="c">click a day to expand</span></h2><div class="week">`+
     cells.map(function(c,i){
-      return `<button type="button" class="day ${i===today?'today':''}" onclick="toggleWeekday(${i})"><b>${DAYS[i].toUpperCase()}</b>`+
-        (c.length?c.slice(0,6).map(function(o){
-          return `<span class="ep">${esc(o.f.title.slice(0,24))}<br><span>EP ${(o.e.aired||0)+1}</span></span>`;
-        }).join(''):'<span class="muted" style="font-size:11px">—</span>')+`</button>`;
+      const cover=c.length?art(c[0].f):'';
+      return `<div class="day ${i===today?'today ':''}${WEEKDAY===i?'selected':''}"${cover?` style="background-image:url('${esc(cover)}')"`:''} onclick="toggleWeekday(${i})" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' ')toggleWeekday(${i})"><b>${DAYS[i].toUpperCase()}</b></div>`;
     }).join('')+`</div>`+
     (WEEKDAY==null?'':`<div class="box" style="margin-top:10px"><h4>${DAYS[WEEKDAY].toUpperCase()} — ${selected.length}</h4>`+
       selected.map(function(f){const e=airingEntry(f);return `<div class="li"><button class="flink" onclick="openEntity('${f.id}')"><b>${esc(f.title)}</b><span class="n">EP ${(e.aired||0)+1}</span></button></div>`;}).join('')+`</div>`);
