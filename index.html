@@ -594,7 +594,7 @@ function threeLists(){
     .sort(function(a,b){return ((b.d.score||0)+b.fit*0.8)-((a.d.score||0)+a.fit*0.8);}).slice(0,6);
     const recGenre=RECGENRE||fav[0]||'';
     const genreMatch=function(f){return !recGenre||(f.genres||[]).indexOf(recGenre)>=0;};
-    const worth=news.length?[]:DB.franchises.filter(function(f){
+    const worth=DB.franchises.filter(function(f){
       if(f.skipped)return false;
       if(['dropped','notmine','active'].indexOf(f.intent)>=0)return false;
       if(watchedTotal(f)>0||!genreMatch(f))return false;
