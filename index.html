@@ -521,10 +521,10 @@ function weekStrip(){
   });
   return `<h2>Airing this week <span class="c">click a day to expand</span></h2><div class="week">`+
     cells.map(function(c,i){
-      return `<button class="day ${i===today?'today':''}" onclick="toggleWeekday(${i})"><b>${DAYS[i].toUpperCase()}</b>`+
+      return `<button type="button" class="day ${i===today?'today':''}" onclick="toggleWeekday(${i})"><b>${DAYS[i].toUpperCase()}</b>`+
         (c.length?c.slice(0,6).map(function(o){
           return `<span class="ep">${esc(o.f.title.slice(0,24))}<br><span>EP ${(o.e.aired||0)+1}</span></span>`;
-        }).join(''):'<span class="muted" style="font-size:11px">—</span>')+`</div>`;
+        }).join(''):'<span class="muted" style="font-size:11px">—</span>')+`</button>`;
     }).join('')+`</div>`+
     (WEEKDAY==null?'':`<div class="box" style="margin-top:10px"><h4>${DAYS[WEEKDAY].toUpperCase()} — ${selected.length}</h4>`+
       selected.map(function(f){const e=airingEntry(f);return `<div class="li"><button class="flink" onclick="openEntity('${f.id}')"><b>${esc(f.title)}</b><span class="n">EP ${(e.aired||0)+1}</span></button></div>`;}).join('')+`</div>`);
